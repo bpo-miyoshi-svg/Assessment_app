@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Assess Pro - 職業準備性総合評価システム</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+        body { font-family: 'Noto Sans JP', sans-serif; }
+        
+        /* 印刷設定 */
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background-color: white; -webkit-print-color-adjust: exact; }
+            #app-container { box-shadow: none; margin: 0; padding: 0; max-width: 100%; }
+            .page-break { page-break-before: always; }
+        }
+        
+        /* カスタムスクロールバー */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+
+    <div id="app-container" class="max-w-4xl mx-auto bg-white min-h-screen md:min-h-0 md:my-8 md:rounded-xl shadow-2xl overflow-hidden flex flex-col">
+        
+        <!-- ヘッダー -->
+        <header class="bg-slate-800 text-white p-4 flex justify-between items-center no-print sticky top-0 z-50 shadow-md">
+            <div class="flex items-center gap-3">
+                <i class="ph ph-files text-3xl text-blue-400"></i>
+                <div>
+                    <h1 class="text-xl font-bold">Smart Assess Pro</h1>
+                    <p class="text-xs text-slate-300">データ自動保存対応版</p>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="clearData()" class="bg-slate-600 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 border border-slate-500">
+                    <i class="ph ph-trash"></i> <span class="hidden md:inline">新規/クリア</span>
+                </button>
+                <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 shadow-lg">
+                    <i class="ph ph-printer"></i> PDF保存
+                </button>
+            </div>
+        </header>
+
+        <main class="flex-grow p-4 md:p-8">
+            
+            <!-- 保存状態インジケータ -->
+            <div id="save-status" class="no-print text-xs text-green-600 font-bold text-right mb-2 h-4 opacity-0 transition-opacity duration-500">
+                <i class="ph ph-check-circle"></i> 自動保存しました
+            </div>
+
+            <!-- 1. 基本情報入力 -->
+            <section id="section-basic" class="mb-8 border-b pb-8 no-print">
+                <h2 class="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
+                    <span class="bg-blue-100 text-blue-600 px-2 py-1 rounded text-sm">Step 1</span> 対象者情報
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">氏名</label>
+                        <input type="text" id="userName" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 bg-slate-50" placeholder="氏名を入力">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">生年月日</label>
+                        <input type="date" id="userDob" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 bg-slate-50">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">評価日</label>
+                        <input type="date" id="assessDate" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 bg-slate-50">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">障害種別/手帳</label>
+                        <input type="text" id="userDisability" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 bg-slate-50" placeholder="例：ASD (手帳2級)">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-bold text-slate-500 mb-1">就労希望・ニーズ（簡潔に）</label>
+                        <input type="text" id="userNeeds" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 bg-slate-50" placeholder="例：事務職希望、週20時間程度から">
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. アセスメント実施エリア -->
+            <section id="section-assessment" class="no-print">
+                <div class="flex justify-between items-end mb-4">
+                    <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                        <span class="bg-blue-100 text-blue-600 px-2 py-1 rounded text-sm">Step 2</span> 評価実施
+                    </h2>
+                    
+                    <!-- カテゴリタブ -->
+                    <div class="flex bg-slate-100 p-1 rounded-lg">
+                        <button onclick="filterCategory('all')" class="px-3 py-1 text-sm rounded-md font-bold transition bg-white shadow text-blue-600 cat-btn" id="btn-all">全て</button>
+                        <button onclick="filterCategory('task')" class="px-3 py-1 text-sm rounded-md font-medium text-slate-500 hover:bg-white/50 transition cat-btn" id="btn-task">作業遂行</button>
+                        <button onclick="filterCategory('life')" class="px-3 py-1 text-sm rounded-md font-medium text-slate-500 hover:bg-white/50 transition cat-btn" id="btn-life">職業生活</button>
+                        <button onclick="filterCategory('inter')" class="px-3 py-1 text-sm rounded-md font-medium text-slate-500 hover:bg-white/50 transition cat-btn" id="btn-inter">対人関係</button>
+                    </div>
+                </div>
+
+                <!-- 評価項目リストコンテナ -->
+                <div id="items-container" class="space-y-6">
+                    <!-- JavaScriptでここに項目が生成されます -->
+                </div>
+            </section>
+
+            <!-- 3. 印刷用レポート (画面上は非表示、印刷時のみ整形される) -->
+            <div id="print-area" class="hidden print:block">
+                <div class="mb-6 border-b-2 border-slate-800 pb-4">
+                    <h1 class="text-2xl font-bold mb-2">職業準備性アセスメント結果シート</h1>
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <div class="flex gap-4"><span class="font-bold w-16">氏名:</span> <span id="p-name"></span></div>
+                        <div class="flex gap-4"><span class="font-bold w-16">生年月日:</span> <span id="p-dob"></span></div>
+                        <div class="flex gap-4"><span class="font-bold w-16">評価日:</span> <span id="p-date"></span></div>
+                        <div class="flex gap-4"><span class="font-bold w-16">作成者:</span> <span id="p-author">____________</span></div>
+                    </div>
+                </div>
+
+                <!-- レーダーチャート表示エリア -->
+                <div class="mb-8 flex justify-center h-64">
+                    <canvas id="radarChart"></canvas>
+                </div>
+
+                <div id="print-items-container" class="grid grid-cols-1 gap-4 text-sm">
+                    <!-- 印刷用アイテム -->
+                </div>
+
+                <div class="mt-8 border text-sm">
+                    <div class="bg-slate-200 p-2 font-bold border-b">総合所見・今後の支援方針</div>
+                    <div class="p-4 h-40 border-b"></div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- アプリケーションロジック -->
+    <script>
+        // ローカルストレージキー
+        const STORAGE_KEY = 'smart_assess_data_v1';
+
+        // エクセルデータに基づくデータベース
+        const assessmentDB = [
+            // ■ 作業遂行 (Task Performance)
+            {
+                id: "推-1", category: "task", type: "推奨", label: "指示された手順に従って作業する",
+                training: "ピッキング、封入作業などの手順が決まった課題",
+                criteria: {
+                    A: "指示された手順に従って作業できる",
+                    B: "具体的に指示されれば、だいたい従える",
+                    C: "具体的に指示されても従えない"
+                }
+            },
+            {
+                id: "推-2", category: "task", type: "推奨", label: "安全に作業する",
+                training: "カッター使用作業、重量物運搬",
+                criteria: {
+                    A: "危険な行動をしない",
+                    B: "注意喚起を受ければ安全に行える",
+                    C: "注意を受けても危険な行動がある"
+                }
+            },
+            {
+                id: "推-3", category: "task", type: "推奨", label: "時間内に仕事を仕上げる",
+                training: "納期を設定したデータ入力、仕分け",
+                criteria: {
+                    A: "時間内に完了できる",
+                    B: "だいたい完了できる",
+                    C: "完了できない"
+                }
+            },
+            {
+                id: "選-1", category: "task", type: "選択", label: "正確に作業する",
+                training: "検品作業、数値チェック",
+                criteria: {
+                    A: "ミスが5%未満（ほとんどない）",
+                    B: "ミスが5%〜30%（時々ある）",
+                    C: "ミスが30%以上（よくある）"
+                }
+            },
+            {
+                id: "選-5", category: "task", type: "選択", label: "集中して作業する",
+                training: "2時間程度の継続作業",
+                criteria: {
+                    A: "2時間程度、私語なく集中できる",
+                    B: "1時間程度なら集中できる",
+                    C: "1時間も集中が続かない"
+                }
+            },
+            {
+                id: "選-6", category: "task", type: "選択", label: "変更に対応する",
+                training: "作業途中で仕様変更を指示する",
+                criteria: {
+                    A: "指示に従って変更に対応できる",
+                    B: "具体的指示があれば対応できる",
+                    C: "パニックになる、または対応できない"
+                }
+            },
+            {
+                id: "選-13", category: "task", type: "選択", label: "メモを取って活用する",
+                training: "口頭指示のみの作業",
+                criteria: {
+                    A: "メモを取り、見返して活用できる",
+                    B: "メモを取るが、活用が不十分",
+                    C: "メモを取らない、取れない"
+                }
+            },
+
+            // ■ 職業生活 (Vocational Life)
+            {
+                id: "推-4", category: "life", type: "推奨", label: "職場の規則を守る",
+                training: "模擬職場での就業規則遵守",
+                criteria: {
+                    A: "規則を理解し遵守している",
+                    B: "教えられればだいたい守れる",
+                    C: "守ることがなかなかできない"
+                }
+            },
+            {
+                id: "推-5", category: "life", type: "推奨", label: "勤怠の安定（遅刻・欠勤）",
+                training: "通所実績の確認",
+                criteria: {
+                    A: "やむを得ない理由以外の欠勤なし",
+                    B: "月に1回程度の欠勤・遅刻",
+                    C: "週1回以上の欠勤・遅刻"
+                }
+            },
+            {
+                id: "推-8", category: "life", type: "推奨", label: "身だしなみを整える",
+                training: "毎朝のチェックリスト確認",
+                criteria: {
+                    A: "常に清潔で場に合っている",
+                    B: "たまに整っていないことがある",
+                    C: "整っていないことがよくある"
+                }
+            },
+            {
+                id: "選-24", category: "life", type: "選択", label: "通院・服薬管理",
+                training: "服薬カレンダー確認、日報",
+                criteria: {
+                    A: "医師の指示通り管理できている",
+                    B: "慣れるまで支援があればできる",
+                    C: "助けがないとできない"
+                }
+            },
+
+            // ■ 対人関係 (Interpersonal)
+            {
+                id: "推-12", category: "inter", type: "推奨", label: "挨拶や返事をする",
+                training: "朝礼、入退室時の行動観察",
+                criteria: {
+                    A: "自分から進んでできる",
+                    B: "相手からされれば応じる",
+                    C: "応じることができない"
+                }
+            },
+            {
+                id: "推-16", category: "inter", type: "推奨", label: "報告・連絡・相談（ホウレンソウ）",
+                training: "作業完了報告、トラブル報告課題",
+                criteria: {
+                    A: "欠かさず適切にできる",
+                    B: "時々しないことがある",
+                    C: "しないことが多い"
+                }
+            },
+            {
+                id: "推-17", category: "inter", type: "推奨", label: "感情をコントロールする",
+                training: "指摘を受けた時の反応観察",
+                criteria: {
+                    A: "仕事に支障が出ることがない",
+                    B: "時々顔に出るが業務は継続できる",
+                    C: "頻繁に支障が出る（怒る、泣く等）"
+                }
+            },
+            {
+                id: "選-27", category: "inter", type: "選択", label: "他の人と協力して作業する",
+                training: "グループワーク、共同作業",
+                criteria: {
+                    A: "自分の役割を果たせる",
+                    B: "たまに役割を果たせないことがある",
+                    C: "他の人の役割を奪う、参加しない"
+                }
+            }
+        ];
+
+        // 状態管理
+        let state = {
+            category: 'all',
+            assessments: {} // id: { score: 'A', note: '' }
+        };
+
+        // 初期化
+        function init() {
+            loadData(); // 保存データの読み込み
+            renderItems();
+            
+            // 入力監視（自動保存と印刷用反映）
+            document.querySelectorAll('input').forEach(el => {
+                el.addEventListener('input', () => {
+                    saveData();
+                    updatePrintData();
+                });
+            });
+
+            // チャート更新（読み込みデータがある場合）
+            setTimeout(updateChart, 500); 
+        }
+
+        // データ保存 (LocalStorage)
+        function saveData() {
+            const dataToSave = {
+                assessments: state.assessments,
+                basicInfo: {
+                    name: document.getElementById('userName').value,
+                    dob: document.getElementById('userDob').value,
+                    date: document.getElementById('assessDate').value,
+                    disability: document.getElementById('userDisability').value,
+                    needs: document.getElementById('userNeeds').value
+                }
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+            
+            // 保存インジケータ表示
+            const statusEl = document.getElementById('save-status');
+            statusEl.classList.remove('opacity-0');
+            setTimeout(() => {
+                statusEl.classList.add('opacity-0');
+            }, 2000);
+        }
+
+        // データ読み込み
+        function loadData() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    // 基本情報の復元
+                    if (parsed.basicInfo) {
+                        document.getElementById('userName').value = parsed.basicInfo.name || '';
+                        document.getElementById('userDob').value = parsed.basicInfo.dob || '';
+                        document.getElementById('assessDate').value = parsed.basicInfo.date || '';
+                        document.getElementById('userDisability').value = parsed.basicInfo.disability || '';
+                        document.getElementById('userNeeds').value = parsed.basicInfo.needs || '';
+                    }
+                    // 評価データの復元
+                    if (parsed.assessments) {
+                        state.assessments = parsed.assessments;
+                    }
+                    updatePrintData();
+                } catch (e) {
+                    console.error("データ読み込みエラー", e);
+                }
+            } else {
+                // 新規の場合は日付だけ今日にする
+                document.getElementById('assessDate').valueAsDate = new Date();
+            }
+        }
+
+        // データ全削除（新規作成）
+        function clearData() {
+            if (confirm("現在入力中のデータを全て消去し、新規作成しますか？\nこの操作は取り消せません。")) {
+                localStorage.removeItem(STORAGE_KEY);
+                location.reload(); // リロードして初期化
+            }
+        }
+
+        // カテゴリフィルタ
+        function filterCategory(cat) {
+            state.category = cat;
+            
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                btn.className = "px-3 py-1 text-sm rounded-md font-medium text-slate-500 hover:bg-white/50 transition cat-btn";
+            });
+            const activeBtn = document.getElementById(`btn-${cat}`);
+            activeBtn.className = "px-3 py-1 text-sm rounded-md font-bold transition bg-white shadow text-blue-600 cat-btn";
+
+            renderItems();
+        }
+
+        // アイテム描画
+        function renderItems() {
+            const container = document.getElementById('items-container');
+            container.innerHTML = '';
+
+            const filtered = assessmentDB.filter(item => 
+                state.category === 'all' ? true : item.category === state.category
+            );
+
+            filtered.forEach(item => {
+                const card = document.createElement('div');
+                card.className = "bg-white border rounded-xl p-4 md:p-6 hover:shadow-md transition group";
+                
+                let badgeColor = "bg-gray-100 text-gray-600";
+                if (item.category === 'task') badgeColor = "bg-green-100 text-green-700";
+                if (item.category === 'life') badgeColor = "bg-orange-100 text-orange-700";
+                if (item.category === 'inter') badgeColor = "bg-purple-100 text-purple-700";
+
+                const currentVal = state.assessments[item.id]?.score || "";
+                const currentNote = state.assessments[item.id]?.note || "";
+
+                card.innerHTML = `
+                    <div class="flex flex-col md:flex-row md:items-start gap-4">
+                        <div class="flex-grow">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="${badgeColor} text-xs font-bold px-2 py-1 rounded">${item.id}</span>
+                                <span class="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">${item.type}</span>
+                            </div>
+                            <h3 class="font-bold text-lg text-slate-800 mb-2">${item.label}</h3>
+                            
+                            <div class="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm mb-4">
+                                <p class="font-bold text-blue-800 text-xs mb-1 flex items-center gap-1">
+                                    <i class="ph ph-magnifying-glass"></i> 推奨される評価場面（訓練）
+                                </p>
+                                <p class="text-blue-900">${item.training}</p>
+                            </div>
+
+                            <div class="text-xs text-slate-500 space-y-1 mb-4">
+                                <p><strong class="text-slate-700">A (3点):</strong> ${item.criteria.A}</p>
+                                <p><strong class="text-slate-700">B (2点):</strong> ${item.criteria.B}</p>
+                                <p><strong class="text-slate-700">C (1点):</strong> ${item.criteria.C}</p>
+                            </div>
+                        </div>
+
+                        <div class="md:w-64 flex-shrink-0 bg-slate-50 p-3 rounded-lg">
+                            <label class="block text-xs font-bold text-slate-500 mb-2">判定 (協同評価)</label>
+                            <div class="grid grid-cols-3 gap-2 mb-3">
+                                <button onclick="setScore('${item.id}', 'A')" class="${getScoreClass(item.id, 'A')} py-2 rounded font-bold border transition">A</button>
+                                <button onclick="setScore('${item.id}', 'B')" class="${getScoreClass(item.id, 'B')} py-2 rounded font-bold border transition">B</button>
+                                <button onclick="setScore('${item.id}', 'C')" class="${getScoreClass(item.id, 'C')} py-2 rounded font-bold border transition">C</button>
+                            </div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">観察メモ</label>
+                            <textarea oninput="setNote('${item.id}', this.value)" class="w-full text-sm p-2 border rounded h-20" placeholder="具体的な行動事実を記入">${currentNote}</textarea>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // スコア設定
+        function setScore(id, score) {
+            if (!state.assessments[id]) state.assessments[id] = { note: "" };
+            state.assessments[id].score = score;
+            saveData(); // 保存
+            renderItems();
+            updatePrintData();
+            updateChart();
+        }
+
+        // メモ設定（oninputで発火）
+        function setNote(id, note) {
+            if (!state.assessments[id]) state.assessments[id] = { score: "" };
+            state.assessments[id].note = note;
+            saveData(); // 保存
+            updatePrintData();
+        }
+
+        // ボタンのスタイル判定
+        function getScoreClass(id, targetScore) {
+            const current = state.assessments[id]?.score;
+            if (current === targetScore) {
+                if (targetScore === 'A') return "bg-blue-600 text-white border-blue-600 shadow-lg scale-105";
+                if (targetScore === 'B') return "bg-yellow-500 text-white border-yellow-500 shadow-lg scale-105";
+                if (targetScore === 'C') return "bg-red-500 text-white border-red-500 shadow-lg scale-105";
+            }
+            return "bg-white text-slate-400 border-slate-200 hover:bg-slate-100";
+        }
+
+        // 印刷用データの更新
+        function updatePrintData() {
+            document.getElementById('p-name').textContent = document.getElementById('userName').value;
+            document.getElementById('p-dob').textContent = document.getElementById('userDob').value;
+            document.getElementById('p-date').textContent = document.getElementById('assessDate').value;
+
+            const container = document.getElementById('print-items-container');
+            container.innerHTML = '';
+
+            assessmentDB.forEach(item => {
+                const data = state.assessments[item.id];
+                if (data && data.score) {
+                    let scoreLabel = "";
+                    let scoreClass = "";
+                    if (data.score === 'A') { scoreLabel = "自立"; scoreClass = "bg-blue-100 text-blue-800 border-blue-300"; }
+                    if (data.score === 'B') { scoreLabel = "一部支援"; scoreClass = "bg-yellow-100 text-yellow-800 border-yellow-300"; }
+                    if (data.score === 'C') { scoreLabel = "困難"; scoreClass = "bg-red-100 text-red-800 border-red-300"; }
+
+                    const row = document.createElement('div');
+                    row.className = "flex border-b pb-2 mb-2 break-inside-avoid";
+                    row.innerHTML = `
+                        <div class="w-1/4 pr-2">
+                            <span class="text-xs font-bold text-slate-500 block">${item.id}</span>
+                            <span class="font-bold text-slate-800">${item.label}</span>
+                        </div>
+                        <div class="w-1/6 flex items-center justify-center">
+                            <span class="border px-3 py-1 rounded text-center text-xs font-bold ${scoreClass}">${data.score}: ${scoreLabel}</span>
+                        </div>
+                        <div class="w-1/2 pl-2 text-xs text-slate-600 border-l">
+                            <span class="font-bold text-slate-500 block mb-1">観察事実:</span>
+                            ${data.note || "（記載なし）"}
+                        </div>
+                    `;
+                    container.appendChild(row);
+                }
+            });
+        }
+
+        // チャート描画
+        let radarChart = null;
+        function updateChart() {
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            
+            const scores = { task: [], life: [], inter: [] };
+            
+            assessmentDB.forEach(item => {
+                const val = state.assessments[item.id]?.score;
+                let point = 0;
+                if (val === 'A') point = 3;
+                if (val === 'B') point = 2;
+                if (val === 'C') point = 1;
+                
+                if (point > 0) {
+                    scores[item.category].push(point);
+                }
+            });
+
+            const avg = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+            
+            const taskScore = avg(scores.task);
+            const lifeScore = avg(scores.life);
+            const interScore = avg(scores.inter);
+
+            if (radarChart) radarChart.destroy();
+
+            radarChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['作業遂行能力', '職業生活安定性', '対人技能'],
+                    datasets: [{
+                        label: '職業準備性レベル',
+                        data: [taskScore, lifeScore, interScore],
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    scales: {
+                        r: {
+                            angleLines: { display: false },
+                            suggestedMin: 0,
+                            suggestedMax: 3,
+                            ticks: { stepSize: 1, callback: function(v){ if(v===1)return 'C'; if(v===2)return 'B'; if(v===3)return 'A'; return ''; } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 起動
+        init();
+    </script>
+</body>
+</html>
